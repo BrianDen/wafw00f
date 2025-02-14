@@ -5,7 +5,7 @@ Copyright (C) 2022, WAFW00F Developers.
 See the LICENSE file for copying permission.
 Edited by Brian 698
 New options:
-            -D {time in seconds}     DELAY IN SECONDS BETWEEN REQUESTS
+            -D {MAX REQUESTS PER SECOND}  MAX REQUESTS PER SECOND
             -H {CUSTOM HTTP HEADER}  FORMAT "User-Agent: Firefox..","Connection: blabld","loo: ffefef"
             -U {CUSTOM USER AGENT}   CUSTOM USER AGENT
 '''

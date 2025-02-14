@@ -54,6 +54,8 @@ class waftoolsengine:
             if not headers:
                 h = self.headers
             else: h = headers
+            print(f"Delay: {delay}")
+            print(f"Header: {headers}")
             req = requests.get(self.target, proxies=self.proxies, headers=h, timeout=self.timeout,
                     allow_redirects=self.allowredir, params=params, verify=False)
             self.log.info('Request Succeeded')

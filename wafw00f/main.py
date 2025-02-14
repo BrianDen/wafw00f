@@ -3,6 +3,7 @@
 '''
 Copyright (C) 2024, WAFW00F Developers.
 See the LICENSE file for copying permission.
+Edited by Brian698
 '''
 
 import csv

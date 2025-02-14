@@ -25,6 +25,29 @@ from wafw00f.lib.evillib import waftoolsengine
 from wafw00f.manager import load_plugins
 from wafw00f.wafprio import wafdetectionsprio
 
+def generate_headers(user_agent=None, custom_headers=None):
+    if user_agent is None:
+        user_agent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:130.0) Gecko/20100101 Firefox/130.0"
+
+    # Merge custom headers if provided
+    if custom_headers:
+        for key, value in custom_headers.items():
+            headers[key] = value
+    else:
+        headers = {
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3',
+            'User-Agent': user_agent,
+            'Accept-Language': 'en-US,en;q=0.5',
+            'Upgrade-Insecure-Requests': '1',
+            'Sec-Fetch-Dest': 'document',
+            'Sec-Fetch-Mode': 'navigate',
+            'Sec-Fetch-Site': 'cross-site',
+            'Priority': 'u=0, i',
+            'DNT': '1',
+        }
+
+    return headers
+
 
 class WAFW00F(waftoolsengine):
 
@@ -391,6 +414,8 @@ def main():
                       help='Set the timeout for the requests.')
     parser.add_option('--no-colors', dest='colors', action='store_false',
                       default=True, help='Disable ANSI colors in output.')
+    parser.add_option('-d', '--delay', dest='delay', action='store', default=0, type=int,
+                      help='Set the delay for the requests.')
 
     options, args = parser.parse_args()
 

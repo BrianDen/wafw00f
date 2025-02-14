@@ -1,10 +1,16 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 '''
-Copyright (C) 2024, WAFW00F Developers.
+Copyright (C) 2022, WAFW00F Developers.
 See the LICENSE file for copying permission.
-Edited by Brian698
+Edited by Brian 698
+New options:
+            -D {time in seconds}     DELAY IN SECONDS BETWEEN REQUESTS
+            -H {CUSTOM HTTP HEADER}  FORMAT "User-Agent: Firefox..","Connection: blabld","loo: ffefef"
+            -U {CUSTOM USER AGENT}   CUSTOM USER AGENT
 '''
+# For keeping python2 support for now
+from __future__ import print_function
 
 import csv
 import io
@@ -13,23 +19,22 @@ import logging
 import os
 import random
 import re
-import sys
 import string
-import urllib.parse
+import sys
 from collections import defaultdict
 from optparse import OptionParser
-
-from wafw00f import __license__, __version__
-from wafw00f.lib.asciiarts import Color, randomArt
-from wafw00f.lib.evillib import waftoolsengine
+from wafw00f.lib.asciiarts import *
+from wafw00f import __version__, __license__
 from wafw00f.manager import load_plugins
 from wafw00f.wafprio import wafdetectionsprio
+from wafw00f.lib.evillib import urlParser, waftoolsengine, def_headers
 
-USER_AGENT = ""
-HTTP_HEADER = ""
+USER_AGENT = None
+HTTP_HEADER = {}
 DELAY = 0
 
 def generate_headers(user_agent=None, custom_headers=None):
+    headers = {}
     if user_agent is None:
         user_agent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:130.0) Gecko/20100101 Firefox/130.0"
 
@@ -55,59 +60,101 @@ def generate_headers(user_agent=None, custom_headers=None):
 
 class WAFW00F(waftoolsengine):
 
-    xsstring = r'<script>alert("XSS");</script>'
-    sqlistring = r'UNION SELECT ALL FROM information_schema AND " or SLEEP(5) or "'
-    lfistring = r'../../etc/passwd'
-    rcestring = r'/bin/cat /etc/passwd; ping 127.0.0.1; curl google.com'
-    xxestring = r'<!ENTITY xxe SYSTEM "file:///etc/shadow">]><pwn>&hack;</pwn>'
+    xsstring = '<script>alert("XSS");</script>'
+    sqlistring = "UNION SELECT ALL FROM information_schema AND ' or SLEEP(5) or '"
+    lfistring = '../../../../etc/passwd'
+    rcestring = '/bin/cat /etc/passwd; ping 127.0.0.1; curl google.com'
+    xxestring = '<!ENTITY xxe SYSTEM "file:///etc/shadow">]><pwn>&hack;</pwn>'
 
     def __init__(self, target='www.example.com', debuglevel=0, path='/',
-                 followredirect=True, extraheaders={}, proxies=None, timeout=7):
+                 followredirect=True, extraheaders={}, proxies=None):
 
         self.log = logging.getLogger('wafw00f')
         self.attackres = None
-        waftoolsengine.__init__(self, target, debuglevel, path, proxies, followredirect, extraheaders, timeout)
-        self.knowledge = {
-            'generic': {
-                'found': False,
-                'reason': ''
-            },
-            'wafname': []
-        }
+        waftoolsengine.__init__(self, target, debuglevel, path, proxies, followredirect, extraheaders)
+        self.knowledge = dict(generic=dict(found=False, reason=''), wafname=list())
         self.rq = self.normalRequest()
 
-    def normalRequest(self, headers=generate_headers(user_agent=USER_AGENT, custom_headers=HTTP_HEADER), delay=DELAY):
-        return self.Request(headers=headers, delay=delay)
+    def normalRequest(self):
+        return self.Request(headers=generate_headers(user_agent=USER_AGENT, custom_headers=HTTP_HEADER), delay=DELAY)
 
-    def customRequest(self, headers=generate_headers(user_agent=USER_AGENT, custom_headers=HTTP_HEADER), delay=DELAY):
-        return self.Request(headers=headers, delay=delay)
+    def customRequest(self):
+        return self.Request(
+            headers=generate_headers(user_agent=USER_AGENT, custom_headers=HTTP_HEADER),
+            delay=DELAY
+        )
 
-    def nonExistent(self, headers=generate_headers(user_agent=USER_AGENT, custom_headers=HTTP_HEADER), delay=DELAY):
-        return self.Request(path=self.path + str(random.randrange(100, 999)) + '.html', headers=headers, delay=delay)
+    def nonExistent(self):
+        return self.Request(
+            path=self.path + str(random.randrange(100, 999)) + '.html',
+            headers=generate_headers(user_agent=USER_AGENT, custom_headers=HTTP_HEADER),
+            delay=DELAY
+        )
 
-    def xssAttack(self, headers=generate_headers(user_agent=USER_AGENT, custom_headers=HTTP_HEADER), delay=DELAY):
-        return self.Request(path=self.path, params={create_random_param_name(): self.xsstring}, headers=headers, delay=delay)
+    def xssAttack(self):
+        return self.Request(
+            path=self.path,
+            params={
+                create_random_param_name(): self.xsstring
+            },
+            headers=generate_headers(user_agent=USER_AGENT, custom_headers=HTTP_HEADER),
+            delay=DELAY
+        )
 
-    def xxeAttack(self, headers=generate_headers(user_agent=USER_AGENT, custom_headers=HTTP_HEADER), delay=DELAY):
-        return self.Request(path=self.path, params={create_random_param_name(): self.xxestring}, headers=headers, delay=delay)
+    def xxeAttack(self):
+        return self.Request(
+            path=self.path,
+            params={
+                create_random_param_name(): self.xxestring
+            },
+            headers=generate_headers(user_agent=USER_AGENT, custom_headers=HTTP_HEADER),
+            delay=DELAY
+        )
 
-    def lfiAttack(self, headers=generate_headers(user_agent=USER_AGENT, custom_headers=HTTP_HEADER), delay=DELAY):
-        return self.Request(path=self.path + self.lfistring, headers=headers, delay=delay)
+    def lfiAttack(self):
+        return self.Request(
+            path=self.path + self.lfistring,
+            headers=generate_headers(user_agent=USER_AGENT, custom_headers=HTTP_HEADER),
+            delay=DELAY
+        )
 
-    def centralAttack(self, headers=generate_headers(user_agent=USER_AGENT, custom_headers=HTTP_HEADER), delay=DELAY):
-        return self.Request(path=self.path, params={create_random_param_name(): self.xsstring, create_random_param_name(): self.sqlistring, create_random_param_name(): self.lfistring}, headers=headers, delay=delay)
+    def centralAttack(self):
+        return self.Request(
+            path=self.path,
+            params={
+                create_random_param_name(): self.xsstring,
+                create_random_param_name(): self.sqlistring,
+                create_random_param_name(): self.lfistring
+            },
+            headers=generate_headers(user_agent=USER_AGENT, custom_headers=HTTP_HEADER),
+            delay=DELAY
+        )
 
-    def sqliAttack(self, headers=generate_headers(user_agent=USER_AGENT, custom_headers=HTTP_HEADER), delay=DELAY):
-        return self.Request(path=self.path, params={create_random_param_name(): self.sqlistring}, headers=headers, delay=delay)
+    def sqliAttack(self):
+        return self.Request(
+            path=self.path,
+            params={
+                create_random_param_name(): self.sqlistring
+            },
+            headers=generate_headers(user_agent=USER_AGENT, custom_headers=HTTP_HEADER),
+            delay=DELAY
+        )
 
-    def osciAttack(self, headers=generate_headers(user_agent=USER_AGENT, custom_headers=HTTP_HEADER), delay=DELAY):
-        return self.Request(path=self.path,params={create_random_param_name(): self.rcestring}, headers=headers, delay=delay)
+    def osciAttack(self):
+        return self.Request(
+            path=self.path,
+            params= {
+                create_random_param_name(): self.rcestring
+            },
+            headers=generate_headers(user_agent=USER_AGENT, custom_headers=HTTP_HEADER),
+            delay=DELAY
+        )
 
     def performCheck(self, request_method):
         r = request_method()
         if r is None:
             raise RequestBlocked()
-        return r, r.url
+        return r
 
     # Most common attacks used to detect WAFs
     attcom = [xssAttack, sqliAttack, lfiAttack]
@@ -123,7 +170,7 @@ class WAFW00F(waftoolsengine):
                 ]
         try:
             # Testing for no user-agent response. Detects almost all WAFs out there.
-            resp1, _ = self.performCheck(self.normalRequest)
+            resp1 = self.performCheck(self.normalRequest)
             if 'User-Agent' in self.headers:
                 self.headers.pop('User-Agent')  # Deleting the user-agent key from object not dict.
             resp3 = self.customRequest(headers=self.headers)
@@ -139,7 +186,7 @@ class WAFW00F(waftoolsengine):
                     return True
 
             # Testing the status code upon sending a xss attack
-            resp2, xss_url = self.performCheck(self.xssAttack)
+            resp2 = self.performCheck(self.xssAttack)
             if resp1.status_code != resp2.status_code:
                 self.log.info('Server returned a different response when a XSS attack vector was tried.')
                 reason = reasons[2]
@@ -148,10 +195,10 @@ class WAFW00F(waftoolsengine):
                 reason += ' while the response code to cross-site scripting attack is "%s"' % resp2.status_code
                 self.knowledge['generic']['reason'] = reason
                 self.knowledge['generic']['found'] = True
-                return xss_url
+                return True
 
             # Testing the status code upon sending a lfi attack
-            resp2, lfi_url = self.performCheck(self.lfiAttack)
+            resp2 = self.performCheck(self.lfiAttack)
             if resp1.status_code != resp2.status_code:
                 self.log.info('Server returned a different response when a directory traversal was attempted.')
                 reason = reasons[2]
@@ -160,10 +207,10 @@ class WAFW00F(waftoolsengine):
                 reason += ' while the response code to a file inclusion attack is "%s"' % resp2.status_code
                 self.knowledge['generic']['reason'] = reason
                 self.knowledge['generic']['found'] = True
-                return lfi_url
+                return True
 
             # Testing the status code upon sending a sqli attack
-            resp2, sqli_url = self.performCheck(self.sqliAttack)
+            resp2 = self.performCheck(self.sqliAttack)
             if resp1.status_code != resp2.status_code:
                 self.log.info('Server returned a different response when a SQLi was attempted.')
                 reason = reasons[2]
@@ -172,7 +219,7 @@ class WAFW00F(waftoolsengine):
                 reason += ' while the response code to a SQL injection attack is "%s"' % resp2.status_code
                 self.knowledge['generic']['reason'] = reason
                 self.knowledge['generic']['found'] = True
-                return sqli_url
+                return True
 
             # Checking for the Server header after sending malicious requests
             normalserver, attackresponse_server = '', ''
@@ -272,9 +319,9 @@ class WAFW00F(waftoolsengine):
     def identwaf(self, findall=False):
         detected = list()
         try:
-            self.attackres, xurl = self.performCheck(self.centralAttack)
+            self.attackres = self.performCheck(self.centralAttack)
         except RequestBlocked:
-            return detected, None
+            return detected
         for wafvendor in self.checklist:
             self.log.info('Checking for %s' % wafvendor)
             if self.wafdetections[wafvendor](self):
@@ -282,7 +329,7 @@ class WAFW00F(waftoolsengine):
                 if not findall:
                     break
         self.knowledge['wafname'] = detected
-        return detected, xurl
+        return detected
 
 def calclogginglevel(verbosity):
     default = 40  # errors are printed out
@@ -291,27 +338,24 @@ def calclogginglevel(verbosity):
         level = 0
     return level
 
-def buildResultRecord(url, waf, evil_url=None):
+def buildResultRecord(url, waf):
     result = {}
     result['url'] = url
     if waf:
         result['detected'] = True
         if waf == 'generic':
-            result['trigger_url'] = evil_url
             result['firewall'] = 'Generic'
             result['manufacturer'] = 'Unknown'
         else:
-            result['trigger_url'] = evil_url
             result['firewall'] = waf.split('(')[0].strip()
             result['manufacturer'] = waf.split('(')[1].replace(')', '').strip()
     else:
-        result['trigger_url'] = evil_url
         result['detected'] = False
         result['firewall'] = 'None'
         result['manufacturer'] = 'None'
     return result
 
-def getTextResults(res=[]):
+def getTextResults(res=None):
     # leaving out some space for future possibilities of newer columns
     # newer columns can be added to this tuple below
     keys = ('detected')
@@ -327,12 +371,12 @@ def getTextResults(res=[]):
         (max([len(str(row[i])) for row in rows]) + 3)
         for i in range(len(rows[0]))
     ]
-    rwfmt = ''.join(['{:>'+str(dank)+'}' for dank in defgen])
+    rwfmt = "".join(["{:>"+str(dank)+"}" for dank in defgen])
     textresults = []
     for row in rows:
         textresults.append(rwfmt.format(*row))
     return textresults
-
+    
 def create_random_param_name(size=8, chars=string.ascii_lowercase):
     return ''.join(random.choice(chars) for _ in range(size))
 
@@ -379,37 +423,27 @@ def main():
                       help='Use an HTTP proxy to perform requests, examples: http://hostname:8080, socks5://hostname:1080, http://user:pass@hostname:8080')
     parser.add_option('--version', '-V', dest='version', action='store_true',
                       default=False, help='Print out the current version of WafW00f and exit.')
-    parser.add_option('--headers', '-H', dest='headers', action='store', default=None,
-                      help='Pass custom headers via a text file to overwrite the default header set.')
-    parser.add_option('-T', '--timeout', dest='timeout', action='store', default=7, type=int,
-                      help='Set the timeout for the requests.')
-    parser.add_option('--no-colors', dest='colors', action='store_false',
-                      default=True, help='Disable ANSI colors in output.')
     parser.add_option('-D', '--delay', dest='delay', action='store', default=0, type=int,
                       help='Set the delay for the requests.')
-    parser.add_argument("-U", "--user-agent", help="Custom User-Agent string", default=None)
-    parser.add_argument("-H", "--http-header", help="Custom User-Agent string", default=None)
-
+    parser.add_option("-U", "--user-agent", help="Custom User-Agent string", default=None)
+    parser.add_option("-H", "--http-header", help="Custom User-Agent string", default=None)
     options, args = parser.parse_args()
-
     logging.basicConfig(level=calclogginglevel(options.verbose))
     log = logging.getLogger('wafw00f')
     if options.output == '-':
         disableStdOut()
-
-    # Windows based systems do not support ANSI sequences,
-    # hence not displaying them.
-    if not options.colors or 'win' in sys.platform:
-        Color.disable()
-
     print(randomArt())
-    (W,Y,G,R,B,C,E) = Color.unpack()
-
     if options.user_agent:
+        global USER_AGENT
         USER_AGENT = options.user_agent
+    global HTTP_HEADER
+    HTTP_HEADER = {}
     if options.http_header:
-        HTTP_HEADER = options.http_header
+        for http_header in options.http_header.split(","):
+            key, value = http_header.split(":")
+            HTTP_HEADER[key.strip()] = value.strip()
     if options.delay:
+        global DELAY
         DELAY = options.delay
     if options.list:
         print('[+] Can test for these WAFs:\r\n')
@@ -421,11 +455,11 @@ def main():
                 first = True
                 for elem in inner:
                     if first:
-                        text = Y+'  {:<{}} '.format(elem, max_len+2)
+                        text = Y+"  {:<{}} ".format(elem, max_len+2)
                         first = False
                     else:
-                        text = W+'{:<{}} '.format(elem, max_len+2)
-                    print(text, E, end='')
+                        text = W+"{:<{}} ".format(elem, max_len+2)
+                    print(text, E, end="")
                 print()
             sys.exit(0)
         except Exception:
@@ -435,25 +469,20 @@ def main():
         print('[+] WAFW00F is provided under the %s%s%s license.' % (C, __license__, E))
         return
     extraheaders = {}
-    if options.headers:
-        log.info('Getting extra headers from %s' % options.headers)
-        extraheaders = getheaders(options.headers)
-        if extraheaders is None:
-            parser.error('Please provide a headers file with colon delimited header names and values')
     if len(args) == 0 and not options.input:
         parser.error('No test target specified.')
     #check if input file is present
     if options.input:
-        log.debug('Loading file "%s"' % options.input)
+        log.debug("Loading file '%s'" % options.input)
         try:
             if options.input.endswith('.json'):
                 with open(options.input) as f:
                     try:
                         urls = json.loads(f.read())
                     except json.decoder.JSONDecodeError:
-                        log.critical('JSON file %s did not contain well-formed JSON', options.input)
+                        log.critical("JSON file %s did not contain well-formed JSON", options.input)
                         sys.exit(1)
-                log.info('Found: %s urls to check.' %(len(urls)))
+                log.info("Found: %s urls to check." %(len(urls)))
                 targets = [ item['url'] for item in urls ]
             elif options.input.endswith('.csv'):
                 columns = defaultdict(list)
@@ -477,22 +506,23 @@ def main():
             log.info('The url %s should start with http:// or https:// .. fixing (might make this unusable)' % target)
             target = 'https://' + target
         print('[*] Checking %s' % target)
-        pret = urllib.parse.urlparse(target)
+        pret = urlParser(target)
         if pret is None:
             log.critical('The url %s is not well formed' % target)
             sys.exit(1)
+        (hostname, _, path, _, _) = pret
         log.info('starting wafw00f on %s' % target)
         proxies = dict()
         if options.proxy:
             proxies = {
-                'http': options.proxy,
-                'https': options.proxy,
+                "http": options.proxy,
+                "https": options.proxy,
             }
-        attacker = WAFW00F(target, debuglevel=options.verbose, path=pret.path,
+        attacker = WAFW00F(target, debuglevel=options.verbose, path=path,
                     followredirect=options.followredirect, extraheaders=extraheaders,
-                        proxies=proxies, timeout=options.timeout)
+                        proxies=proxies)
         if attacker.rq is None:
-            log.error('Site %s appears to be down' % pret.hostname)
+            log.error('Site %s appears to be down' % hostname)
             continue
         if options.test:
             if options.test in attacker.wafdetections:
@@ -504,32 +534,31 @@ def main():
             else:
                 print('[-] WAF %s was not found in our list\r\nUse the --list option to see what is available' % options.test)
             return
-        waf, xurl = attacker.identwaf(options.findall)
+        waf = attacker.identwaf(options.findall)
         log.info('Identified WAF: %s' % waf)
         if len(waf) > 0:
             for i in waf:
-                results.append(buildResultRecord(target, i, xurl))
+                results.append(buildResultRecord(target, i))
             print('[+] The site %s%s%s is behind %s%s%s WAF.' % (B, target, E, C, (E+' and/or '+C).join(waf), E))
         if (options.findall) or len(waf) == 0:
             print('[+] Generic Detection results:')
-            generic_url = attacker.genericdetect()
-            if generic_url:
+            if attacker.genericdetect():
                 log.info('Generic Detection: %s' % attacker.knowledge['generic']['reason'])
                 print('[*] The site %s seems to be behind a WAF or some sort of security solution' % target)
                 print('[~] Reason: %s' % attacker.knowledge['generic']['reason'])
-                results.append(buildResultRecord(target, 'generic', generic_url))
+                results.append(buildResultRecord(target, 'generic'))
             else:
                 print('[-] No WAF detected by the generic detection')
-                results.append(buildResultRecord(target, None, None))
+                results.append(buildResultRecord(target, None))
         print('[~] Number of requests: %s' % attacker.requestnumber)
     #print table of results
     if len(results) > 0:
-        log.info('Found: %s matches.' % (len(results)))
+        log.info("Found: %s matches." % (len(results)))
     if options.output:
         if options.output == '-':
             enableStdOut()
             if options.format == 'json':
-                json.dump(results, sys.stdout, indent=2, sort_keys=True)
+                json.dump(results, sys.stdout, indent=2)
             elif options.format == 'csv':
                 csvwriter = csv.writer(sys.stdout, delimiter=',', quotechar='"',
                     quoting=csv.QUOTE_MINIMAL)
@@ -543,11 +572,11 @@ def main():
             else:
                 print(os.linesep.join(getTextResults(results)))
         elif options.output.endswith('.json'):
-            log.debug('Exporting data in json format to file: %s' % (options.output))
+            log.debug("Exporting data in json format to file: %s" % (options.output))
             with open(options.output, 'w') as outfile:
-                json.dump(results, outfile, indent=2, sort_keys=True)
+                json.dump(results, outfile, indent=2)
         elif options.output.endswith('.csv'):
-            log.debug('Exporting data in csv format to file: %s' % (options.output))
+            log.debug("Exporting data in csv format to file: %s" % (options.output))
             with open(options.output, 'w') as outfile:
                 csvwriter = csv.writer(outfile, delimiter=',', quotechar='"',
                     quoting=csv.QUOTE_MINIMAL)
@@ -559,10 +588,10 @@ def main():
                         count += 1
                     csvwriter.writerow(result.values())
         else:
-            log.debug('Exporting data in text format to file: %s' % (options.output))
+            log.debug("Exporting data in text format to file: %s" % (options.output))
             if options.format == 'json':
                 with open(options.output, 'w') as outfile:
-                    json.dump(results, outfile, indent=2, sort_keys=True)
+                    json.dump(results, outfile, indent=2)
             elif options.format == 'csv':
                 with open(options.output, 'w') as outfile:
                     csvwriter = csv.writer(outfile, delimiter=',', quotechar='"',
@@ -579,7 +608,6 @@ def main():
                     outfile.write(os.linesep.join(getTextResults(results)))
 
 if __name__ == '__main__':
-    version_info = sys.version_info
-    if version_info.major < 3 or (version_info.major == 3 and version_info.minor < 6):
-        sys.stderr.write('Your version of python is way too old... please update to 3.6 or later\r\n')
+    if sys.hexversion < 0x2060000:
+        sys.stderr.write('Your version of python is way too old... please update to 2.6 or later\r\n')
     main()

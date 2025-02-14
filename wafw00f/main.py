@@ -25,6 +25,10 @@ from wafw00f.lib.evillib import waftoolsengine
 from wafw00f.manager import load_plugins
 from wafw00f.wafprio import wafdetectionsprio
 
+USER_AGENT = ""
+HTTP_HEADER = ""
+DELAY = 0
+
 def generate_headers(user_agent=None, custom_headers=None):
     if user_agent is None:
         user_agent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:130.0) Gecko/20100101 Firefox/130.0"
@@ -72,65 +76,32 @@ class WAFW00F(waftoolsengine):
         }
         self.rq = self.normalRequest()
 
-    def normalRequest(self):
-        return self.Request()
+    def normalRequest(self, headers=generate_headers(user_agent=USER_AGENT, custom_headers=HTTP_HEADER), delay=DELAY):
+        return self.Request(headers=headers, delay=delay)
 
-    def customRequest(self, headers=None):
-        return self.Request(
-            headers=headers
-        )
+    def customRequest(self, headers=generate_headers(user_agent=USER_AGENT, custom_headers=HTTP_HEADER), delay=DELAY):
+        return self.Request(headers=headers, delay=delay)
 
-    def nonExistent(self):
-        return self.Request(
-            path=self.path + str(random.randrange(100, 999)) + '.html'
-        )
+    def nonExistent(self, headers=generate_headers(user_agent=USER_AGENT, custom_headers=HTTP_HEADER), delay=DELAY):
+        return self.Request(path=self.path + str(random.randrange(100, 999)) + '.html', headers=headers, delay=delay)
 
-    def xssAttack(self):
-        return self.Request(
-            path=self.path,
-            params={
-                create_random_param_name(): self.xsstring
-            }
-        )
+    def xssAttack(self, headers=generate_headers(user_agent=USER_AGENT, custom_headers=HTTP_HEADER), delay=DELAY):
+        return self.Request(path=self.path, params={create_random_param_name(): self.xsstring}, headers=headers, delay=delay)
 
-    def xxeAttack(self):
-        return self.Request(
-            path=self.path,
-            params={
-                create_random_param_name(): self.xxestring
-            }
-        )
+    def xxeAttack(self, headers=generate_headers(user_agent=USER_AGENT, custom_headers=HTTP_HEADER), delay=DELAY):
+        return self.Request(path=self.path, params={create_random_param_name(): self.xxestring}, headers=headers, delay=delay)
 
-    def lfiAttack(self):
-        return self.Request(
-            path=self.path + self.lfistring
-        )
+    def lfiAttack(self, headers=generate_headers(user_agent=USER_AGENT, custom_headers=HTTP_HEADER), delay=DELAY):
+        return self.Request(path=self.path + self.lfistring, headers=headers, delay=delay)
 
-    def centralAttack(self):
-        return self.Request(
-            path=self.path,
-            params={
-                create_random_param_name(): self.xsstring,
-                create_random_param_name(): self.sqlistring,
-                create_random_param_name(): self.lfistring
-            }
-        )
+    def centralAttack(self, headers=generate_headers(user_agent=USER_AGENT, custom_headers=HTTP_HEADER), delay=DELAY):
+        return self.Request(path=self.path, params={create_random_param_name(): self.xsstring, create_random_param_name(): self.sqlistring, create_random_param_name(): self.lfistring}, headers=headers, delay=delay)
 
-    def sqliAttack(self):
-        return self.Request(
-            path=self.path,
-            params={
-                create_random_param_name(): self.sqlistring
-            }
-        )
+    def sqliAttack(self, headers=generate_headers(user_agent=USER_AGENT, custom_headers=HTTP_HEADER), delay=DELAY):
+        return self.Request(path=self.path, params={create_random_param_name(): self.sqlistring}, headers=headers, delay=delay)
 
-    def osciAttack(self):
-        return self.Request(
-            path=self.path,
-            params= {
-                create_random_param_name(): self.rcestring
-            }
-        )
+    def osciAttack(self, headers=generate_headers(user_agent=USER_AGENT, custom_headers=HTTP_HEADER), delay=DELAY):
+        return self.Request(path=self.path,params={create_random_param_name(): self.rcestring}, headers=headers, delay=delay)
 
     def performCheck(self, request_method):
         r = request_method()
@@ -414,8 +385,10 @@ def main():
                       help='Set the timeout for the requests.')
     parser.add_option('--no-colors', dest='colors', action='store_false',
                       default=True, help='Disable ANSI colors in output.')
-    parser.add_option('-d', '--delay', dest='delay', action='store', default=0, type=int,
+    parser.add_option('-D', '--delay', dest='delay', action='store', default=0, type=int,
                       help='Set the delay for the requests.')
+    parser.add_argument("-U", "--user-agent", help="Custom User-Agent string", default=None)
+    parser.add_argument("-H", "--http-header", help="Custom User-Agent string", default=None)
 
     options, args = parser.parse_args()
 
@@ -432,6 +405,12 @@ def main():
     print(randomArt())
     (W,Y,G,R,B,C,E) = Color.unpack()
 
+    if options.user_agent:
+        USER_AGENT = options.user_agent
+    if options.http_header:
+        HTTP_HEADER = options.http_header
+    if options.delay:
+        DELAY = options.delay
     if options.list:
         print('[+] Can test for these WAFs:\r\n')
         try:
